@@ -252,3 +252,4 @@ shikiCalled.OnServerEvent:Connect(function(god)
 		end)
 	end
 end)
+
