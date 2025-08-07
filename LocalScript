@@ -1,0 +1,52 @@
+--Service
+local UserInputService = game:GetService("UserInputService")
+
+--Local Variables
+local player = game.Players.LocalPlayer
+local class = player:GetAttribute("Class")
+local linked = player:GetAttribute("Linked")
+
+--Remotes
+local callShiki = game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("ShikiCall")
+local disablePrompts = game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("DisablePrompt")
+
+--Updating class variable when player change class
+player:GetAttributeChangedSignal("Class"):Connect(function()
+	class = player:GetAttribute("Class")
+end)
+
+--Changing player linked variable when player linked to another player
+player:GetAttributeChangedSignal("Linked"):Connect(function()
+	linked = player:GetAttribute("Linked")
+end)
+
+--Summoning player's shinki if it pressed F and if player is class "God"
+UserInputService.InputBegan:Connect(function(key, gameProcessed)
+	if gameProcessed then return end
+	if key.KeyCode == Enum.KeyCode.F and class == "God" and linked then
+		callShiki:FireServer()
+	end
+end)
+
+--Updating camera subject if player is shink and second player summoned shinki
+callShiki.OnClientEvent:Connect(function()
+	if class == "Shiki" then
+		local weapon = game.Players:GetPlayerByUserId(linked).Character:FindFirstChildWhichIsA("Tool")
+		workspace.Camera.CameraSubject = weapon
+	end
+end)
+
+--Disabling prompts if player is shinki so he cant link
+disablePrompts.OnClientEvent:Connect(function(prompts)
+	if class == "God" then return end
+	for _, prompt in pairs(prompts) do
+		prompt.Enabled = false
+	end
+end)
+
+--Updating camera subjet to shinki soul if it was summoned
+workspace.ChildAdded:Connect(function(child)
+	if child.Name == player.UserId .. " Soul" then
+		workspace.Camera.CameraSubject = child
+	end
+end)
