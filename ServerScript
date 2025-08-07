@@ -1,0 +1,254 @@
+--Services
+local tweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+--Remotes
+local disablePrompt = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("DisablePrompt")
+local shikiCalled = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("ShikiCall")
+
+--Tables
+local proximityPrompts = {}
+local characterSkin = {}
+
+--Vfx
+local summoningCircle = ReplicatedStorage:WaitForChild("VfxStorage"):WaitForChild("SummoningCircle")
+
+--Tween infos
+--Tween to make the shinki soul go up
+local tweenInfoShinkiUp = TweenInfo.new(
+	1,
+	Enum.EasingStyle.Sine,
+	Enum.EasingDirection.Out
+)
+
+--Tween to make the shinki soul go to the player
+local tweenInfoShinkToPlayer = TweenInfo.new(
+	2,
+	Enum.EasingStyle.Sine,
+	Enum.EasingDirection.InOut
+)
+
+--Tween to make the summoning circle rotate
+local tweenInfoCircle = TweenInfo.new(
+	.5,
+	Enum.EasingStyle.Linear,
+	Enum.EasingDirection.InOut
+)
+
+--Tween to scale the shinki character
+local tweenInfoScale = TweenInfo.new(
+	2, 
+	Enum.EasingStyle.Linear
+)
+
+--Turning given character yellow
+local function turnCharacterYellow(character)
+	--Creating table for player to save his skin
+	characterSkin[character] = {
+		colors = {};
+		clothes = {};
+		accesories = {};
+		face = nil
+	}
+
+	--Saving player shirts, pants and accesories and deleting them
+	for _, item in pairs(character:GetChildren()) do
+		if item:IsA("Shirt") or item:IsA("Pants") then
+			table.insert(characterSkin[character].clothes, item:Clone())
+			item:Destroy()
+		elseif item:IsA("Accessory") then
+			table.insert(characterSkin[character].accesories, item:Clone())
+			item:Destroy()
+		end
+	end
+
+	--Saving player body color and turning it to yellow and neon and turning all player decals to invinsible
+	for _, part in pairs(character:GetDescendants()) do
+		if part:IsA("BasePart") then
+			characterSkin[character].colors[part] = part.Color
+			part.Color = Color3.fromRGB(255, 255, 0)
+			part.Material = Enum.Material.Neon
+		elseif part:IsA("Decal") then
+			part.Transparency = 1
+		end
+	end
+	
+	--Saving player face and deleting it
+	for _, face in pairs(character:FindFirstChild("Head"):GetChildren()) do
+		if face:IsA("SurfaceAppearance") then
+			characterSkin[character].face = face:Clone()
+			face:Destroy()
+		end
+	end
+end
+
+--Turning given character back to normal
+local function turnCharacterBack(character)
+	--Getting player skin data and if cant then returning
+	local data = characterSkin[character]
+	if not data then return end
+	
+	--Turning all player parts back to their original color
+	for part, color in pairs(data.colors) do
+		if part and part:IsA("BasePart") then
+			part.Color = color
+			part.Material = Enum.Material.Plastic
+		end
+	end
+
+	--Returning player's clothes
+	for _, cloth in pairs(data.clothes) do
+		cloth:Clone().Parent = character
+	end
+
+	--Returning player's accesories
+	for _, accesory in pairs(data.accesories) do
+		accesory:Clone().Parent = character
+	end
+
+	--Returning player's decals back to visible
+	for _, decal in pairs(character:GetDescendants()) do
+		if decal:IsA("Decal") then
+			decal.Transparency = 0
+		end
+	end
+	
+	--Returning player face
+	if data.face then
+		data.face:Clone().Parent = character.Head
+	end
+
+	--Clears player skin data
+	characterSkin[character] = nil
+end
+
+
+--Creating and returning soul to given character
+local function createSoul(player)
+	local shinkiSoul = Instance.new("Part")
+	shinkiSoul.Shape = Enum.PartType.Ball
+	shinkiSoul.Material = Enum.Material.Neon
+	shinkiSoul.Color = Color3.fromRGB(255,255, 0)
+	shinkiSoul.Size = Vector3.new(1, 1, 1)
+	shinkiSoul.Anchored = true
+	shinkiSoul.CanCollide = false
+	shinkiSoul.Parent = workspace
+	shinkiSoul.Position = player.Character.HumanoidRootPart.Position
+	shinkiSoul.Name = player.UserId .. " Soul"
+
+	return shinkiSoul
+end
+
+--Creating and returning summoning circle
+local function createCircle(character) 
+	local circle = summoningCircle:Clone()
+	circle:PivotTo(CFrame.new(character.HumanoidRootPart.Position.X, character.RightFoot.Position.Y, character.HumanoidRootPart.Position.Z))
+	circle.Parent = workspace.VfxFolder
+	return circle
+end
+
+game.Players.PlayerAdded:Connect(function(player)
+	--Giving the player by default class "God" on joining
+	player:SetAttribute("Class", "God")
+
+	--Detects if player changed his class
+	player:GetAttributeChangedSignal("Class"):Connect(function()
+		--Assigning player weapon type
+		player:SetAttribute("Weapon", "SwordOfLight")
+		--Creating prompt to link player with god
+		local newPrompt = Instance.new("ProximityPrompt")
+		newPrompt.ObjectText = "Link"
+		newPrompt.Parent = player.Character
+		newPrompt.ActionText = "Link with "..player.Name
+		--Inserting new prompt to table with all of linking prompts
+		table.insert(proximityPrompts, newPrompt)
+		--Giving all players info about linking prompts so if they are a shinki then they cant link with another shinki
+		disablePrompt:FireAllClients(proximityPrompts)
+		newPrompt.Triggered:Connect(function(god)
+			--Linking players and triggering and destroying the prompt
+			player:SetAttribute("Linked", god.UserId)
+			god:SetAttribute("Linked", player.UserId)
+			table.remove(proximityPrompts, table.find(proximityPrompts, newPrompt))
+			newPrompt:Destroy()
+		end)
+	end)
+end)
+
+game.Players.PlayerRemoving:Connect(function(player)
+	--Deleting player skin data and player prompt to link from the table
+	characterSkin[player.Character] = nil
+	for i, prompt in pairs(proximityPrompts) do
+		if prompt.Parent == player.Character then
+			table.remove(proximityPrompts, i)
+			break
+		end
+	end
+end)
+
+shikiCalled.OnServerEvent:Connect(function(god)
+	--Getting linked player's shinki
+	local shinki = game.Players:GetPlayerByUserId(god:GetAttribute("Linked"))
+	if shinki then
+		--Creating shinki soul and turning character to yellow
+		local shinkiSoul = createSoul(shinki)
+		turnCharacterYellow(shinki.Character)
+		
+		--Shrinking shinki character so it "turns" into the soul
+		local humanoid = shinki.Character:WaitForChild("Humanoid")
+		local humanoidScale = {
+			HeadScale = humanoid.HeadScale.Value,
+			BodyDepthScale = humanoid.BodyDepthScale.Value,
+			BodyWidthScale = humanoid.BodyWidthScale.Value,
+			BodyHeightScale = humanoid.BodyHeightScale.Value,
+		}
+
+		shinki.Character.HumanoidRootPart.Anchored = true
+		shinki.Character.HumanoidRootPart.Position = shinkiSoul.Position
+		tweenService:Create(humanoid.HeadScale, tweenInfoScale, {Value = .2}):Play()
+		tweenService:Create(humanoid.BodyDepthScale, tweenInfoScale, {Value = .2}):Play()
+		tweenService:Create(humanoid.BodyWidthScale, tweenInfoScale, {Value = .2}):Play()
+		tweenService:Create(humanoid.BodyHeightScale, tweenInfoScale, {Value = .2}):Play()
+		
+		--Creating summoning circle and rotating it
+		local circle = createCircle(shinki.Character)
+		
+		for i = 1, 4 do
+			local tweenSpin = tweenService:Create(circle.PrimaryPart, tweenInfoCircle, {CFrame = circle.PrimaryPart.CFrame * CFrame.Angles(0, math.rad(180), 0)})
+			tweenSpin:Play()
+			tweenSpin.Completed:Wait()
+		end
+		circle:Destroy()
+
+		--Teleporting shinki to hidden place and returning it back to normal
+		shinki.Character.HumanoidRootPart.Anchored = false
+		shinki.Character.HumanoidRootPart.CFrame = workspace.ShikiSpawn.CFrame * CFrame.new(0, 20, 0)
+		turnCharacterBack(shinki.Character)
+		task.spawn(function()
+			for part, scale in pairs(humanoidScale) do
+				humanoid:FindFirstChild(part).Value = scale
+			end
+		end)
+
+		--Lifting shinki soul up
+		local tweenGoalUp = {Position = Vector3.new(shinkiSoul.Position.X, shinkiSoul.Position.Y + 10, shinkiSoul.Position.Z)}
+		local tweenUp = tweenService:Create(shinkiSoul, tweenInfoShinkiUp, tweenGoalUp)
+		tweenUp:Play()
+
+		tweenUp.Completed:Connect(function()
+			--Moving shinki soul to the player
+			local tweenGoalToPlayer = {Position = god.Character.HumanoidRootPart.Position}
+			local tweenToPlayer = tweenService:Create(shinkiSoul, tweenInfoShinkToPlayer, tweenGoalToPlayer)
+			tweenToPlayer:Play()
+
+			tweenToPlayer.Completed:Connect(function()
+				--Destroying shinki soul and giving the second player the weapon
+				shinkiSoul:Destroy()
+
+				local shikiWeapon = game:GetService("ReplicatedStorage"):WaitForChild("Weapon"):WaitForChild(shinki:GetAttribute("Weapon"))
+				shikiWeapon.Parent = god.Character
+				--Firing client event to the second player so it will change camera subject to the weapon
+				shikiCalled:FireClient(shinki)
+			end)
+		end)
+	end
+end)
